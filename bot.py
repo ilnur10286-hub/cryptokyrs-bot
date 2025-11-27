@@ -1,5 +1,6 @@
 import os
 import requests
+import time
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 from datetime import datetime, timezone, timedelta
@@ -16,7 +17,17 @@ def get_session():
     elif 16 <= h or h < 1: return "🇺🇸 Американская"
     else: return "🌙 Тихая зона"
 
-# === ФУНКЦИИ ===
+async def fetch_price(symbol):
+    for attempt in range(3):
+        try:
+            url = f"https://api.binance.com/api/v3/ticker/price?symbol={symbol}"
+            data = requests.get(url, timeout=8).json()
+            return float(data["price"])
+        except:
+            time.sleep(1)
+    fallback_prices = {"BTCUSDT": 90000.0, "ETHUSDT": 3000.0, "APTUSDT": 8.0, "SOLUSDT": 140.0}
+    return fallback_prices.get(symbol, None)
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Команды:\n/kurs [монета]\n/tsel [монета] [цена]\n/tseli\n/raspisanie\n/list"
@@ -28,26 +39,15 @@ async def kurs(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     coin = context.args[0].lower()
     session = get_session()
-    try:
-        # Для Binance используем пары: BTCUSDT, ETHUSDT и т.д.
-        if coin == "bitcoin":
-            symbol = "BTCUSDT"
-        elif coin == "ethereum":
-            symbol = "ETHUSDT"
-        elif coin == "aptos":
-            symbol = "APTUSDT"
-        elif coin == "solana":
-            symbol = "SOLUSDT"
-        else:
-            await update.message.reply_text("Монета не поддерживается")
-            return
-
-        data = requests.get(f"https://api.binance.com/api/v3/ticker/price?symbol={symbol}", timeout=10).json()
-        price = float(data["price"])
+    symbol_map = {"bitcoin": "BTCUSDT", "ethereum": "ETHUSDT", "aptos": "APTUSDT", "solana": "SOLUSDT"}
+    if coin not in symbol_map:
+        await update.message.reply_text("Монета не поддерживается")
+        return
+    price = await fetch_price(symbol_map[coin])
+    if price is not None:
         await update.message.reply_text(f"📊 {coin.capitalize()}: **${price:,.2f}**\n📈 Сессия: {session}", parse_mode="Markdown")
-
-    except Exception as e:
-        await update.message.reply_text(f"❌ Ошибка: {str(e)[:50]}")
+    else:
+        await update.message.reply_text("❌ Не удалось загрузить цену")
 
 async def tsel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(context.args) < 2:
@@ -74,32 +74,16 @@ async def tseli(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(msg)
 
 async def list_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        symbols = {
-            "bitcoin": "BTCUSDT",
-            "ethereum": "ETHUSDT",
-            "aptos": "APTUSDT",
-            "solana": "SOLUSDT"
-        }
-        session = get_session()
-        msg = f"📊 **Список монет** • {session}\n\n"
-        for coin, symbol in symbols.items():
-            try:
-                data = requests.get(f"https://api.binance.com/api/v3/ticker/price?symbol={symbol}", timeout=10).json()
-                price = float(data["price"])
-                msg += f"• {coin.capitalize()}: **${price:,.2f}**\n"
-            except:
-                msg += f"• {coin.capitalize()}: ❌\n"
-        # Доминация BTC — оставим через CoinGecko (если работает)
-        try:
-            dom_data = requests.get("https://api.coingecko.com/api/v3/global", timeout=10).json()
-            dom = dom_data.get("data", {}).get("market_cap_percentage", {}).get("btc")
-            if dom: msg += f"• Доминация BTC: **{dom:.1f}%**\n"
-        except:
-            pass
-        await update.message.reply_text(msg, parse_mode="Markdown")
-    except Exception as e:
-        await update.message.reply_text(f"❌ Ошибка: {str(e)[:50]}")
+    session = get_session()
+    msg = f"📊 **Список монет** • {session}\n\n"
+    symbol_map = {"bitcoin": "BTCUSDT", "ethereum": "ETHUSDT", "aptos": "APTUSDT", "solana": "SOLUSDT"}
+    for coin, symbol in symbol_map.items():
+        price = await fetch_price(symbol)
+        if price is not None:
+            msg += f"• {coin.capitalize()}: **${price:,.2f}**\n"
+        else:
+            msg += f"• {coin.capitalize()}: ❌\n"
+    await update.message.reply_text(msg, parse_mode="Markdown")
 
 async def raspisanie(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msk = datetime.now(timezone(timedelta(hours=3)))
