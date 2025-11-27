@@ -29,15 +29,16 @@ async def kurs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     coin = context.args[0].lower()
     session = get_session()
     try:
+        headers = {"User-Agent": "Mozilla/5.0"}
         if coin == "btc.d":
-            data = requests.get("https://api.coingecko.com/api/v3/global", timeout=10).json()
+            data = requests.get("https://api.coingecko.com/api/v3/global", headers=headers, timeout=10).json()
             dom = data.get("data", {}).get("market_cap_percentage", {}).get("btc")
             if dom is not None:
                 await update.message.reply_text(f"Доминация BTC: **{dom:.2f}%**\n📊 Сессия: {session}", parse_mode="Markdown")
             else:
                 await update.message.reply_text("❌ Доминация: нет данных")
         elif coin in VALID_COINS:
-            data = requests.get(f"https://api.coingecko.com/api/v3/simple/price?ids={coin}&vs_currencies=usd", timeout=10).json()
+            data = requests.get(f"https://api.coingecko.com/api/v3/simple/price?ids={coin}&vs_currencies=usd", headers=headers, timeout=10).json()
             price = data.get(coin, {}).get("usd")
             if price is not None:
                 await update.message.reply_text(f"📊 {coin.capitalize()}: **${price:,.2f}**\n📈 Сессия: {session}", parse_mode="Markdown")
@@ -45,8 +46,8 @@ async def kurs(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text(f"❌ {coin}: нет данных")
         else:
             await update.message.reply_text("Монета не поддерживается")
-    except:
-        await update.message.reply_text("❌ Ошибка")
+    except Exception as e:
+        await update.message.reply_text(f"❌ Ошибка: {str(e)[:50]}")
 
 async def tsel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(context.args) < 2:
@@ -74,9 +75,10 @@ async def tseli(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def list_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
+        headers = {"User-Agent": "Mozilla/5.0"}
         ids = ",".join(VALID_COINS)
-        prices = requests.get(f"https://api.coingecko.com/api/v3/simple/price?ids={ids}&vs_currencies=usd", timeout=10).json()
-        dom_data = requests.get("https://api.coingecko.com/api/v3/global", timeout=10).json()
+        prices = requests.get(f"https://api.coingecko.com/api/v3/simple/price?ids={ids}&vs_currencies=usd", headers=headers, timeout=10).json()
+        dom_data = requests.get("https://api.coingecko.com/api/v3/global", headers=headers, timeout=10).json()
         dom = dom_data.get("data", {}).get("market_cap_percentage", {}).get("btc")
         session = get_session()
         msg = f"📊 **Список монет** • {session}\n\n"
@@ -85,8 +87,8 @@ async def list_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
             msg += f"• {c.capitalize()}: **${p:,.2f}**\n" if p else f"• {c}: ❌\n"
         if dom: msg += f"• Доминация BTC: **{dom:.1f}%**\n"
         await update.message.reply_text(msg, parse_mode="Markdown")
-    except:
-        await update.message.reply_text("❌ Ошибка")
+    except Exception as e:
+        await update.message.reply_text(f"❌ Ошибка: {str(e)[:50]}")
 
 async def raspisanie(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msk = datetime.now(timezone(timedelta(hours=3)))
